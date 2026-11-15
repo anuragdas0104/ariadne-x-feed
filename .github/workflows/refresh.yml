@@ -1,0 +1,25 @@
+name: Refresh X feed
+on:
+  schedule:
+    - cron: "0 2 * * *"   # 02:00 UTC daily, an hour before X downloads at 03:00 London
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download latest feed from the Cloudflare worker
+        run: |
+          curl -sSf --retry 3 --retry-delay 20 "${{ secrets.FEED_URL }}?refresh=1" -o new.csv
+          lines=$(wc -l < new.csv)
+          echo "rows: $lines"
+          test "$lines" -gt 100   # never publish a broken/empty feed
+          mv new.csv ariadne-x-feed.csv
+      - name: Commit if changed
+        run: |
+          git config user.name "feed-bot"
+          git config user.email "feed-bot@users.noreply.github.com"
+          git add ariadne-x-feed.csv
+          git diff --cached --quiet && echo "no change" || (git commit -m "Refresh feed $(date -u +%F)" && git push)
